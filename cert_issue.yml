@@ -69,7 +69,7 @@
       community.crypto.openssl_csr:
         path: certs/{{ domain_name }}/cert.csr
         privatekey_path: certs/{{ domain_name }}/privkey.pem
-        privatekey_passphrase: "{{ lookup('ansible.builtin.password', 'certs/{{ domain_name }}/passphrase.txt', length=25) }}"
+        # privatekey_passphrase: "{{ lookup('ansible.builtin.password', 'certs/{{ domain_name }}/passphrase.txt', length=25) }}"
         common_name: "{{ domain_name }}"
         country_name: US
         organization_name: "{{ org_name }}"
