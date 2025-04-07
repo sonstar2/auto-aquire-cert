@@ -114,22 +114,22 @@
     #   when: acme_challenge is changed
     #   register: acme_dns_challenge
 
-    # - name: create the DNS records for the challenge
-    #   amazon.aws.route53:
-    #     command: create
-    #     zone: "{{ ler53_route_53_domain | default(omit) }}"
-    #     hosted_zone_id: "{{ ler53_route_53_zone_id | default(omit) }}"
-    #     record: "{{ ler53_item.value['dns-01']['record'] }}"
-    #     type: TXT
-    #     ttl: 300
-    #     value: "\"{{ ler53_item.value['dns-01']['resource_value'] }}\""
-    #     aws_access_key: "{{ aws_access_key | default(omit) }}"
-    #     aws_secret_key: "{{ aws_secret_key | default(omit) }}"
-    #     overwrite: yes
-    #     wait: yes
-    #   with_dict: "{{ lets_encrypt_challenge['challenge_data'] | default({}) }}"
-    #   loop_control:
-    #     loop_var: ler53_item
+    - name: create the DNS records for the challenge
+      amazon.aws.route53:
+        command: create
+        zone: "{{ ler53_route_53_domain | default(omit) }}"
+        hosted_zone_id: "{{ ler53_route_53_zone_id | default(omit) }}"
+        record: "{{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].record | regex_replace('^(_acme-challenge\\.[^\\.]+)\\..*$', '\\1') }}"
+        type: TXT
+        ttl: 300
+        value: "\"{{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].resource_value }}\""
+        aws_access_key: "{{ aws_access_key | default(omit) }}"
+        aws_secret_key: "{{ aws_secret_key | default(omit) }}"
+        overwrite: yes
+        wait: yes
+      with_dict: "{{ lets_encrypt_challenge['challenge_data'] | default({}) }}"
+      loop_control:
+        loop_var: ler53_item
 
     # Tells the LetsEncrypt service that the challenge records have been created and to validate domain ownership
     - name: Validate ACME Challenge and retrieve cert and cert chain
@@ -150,17 +150,17 @@
 
     # This task is specific to DNS Made Easy provider and cleans up the challenge records from the zone.
     # It could be replaced with any DNS provider that ansible supports.
-    - name: Cleanup dns-01 challenge record for {{ domain_name }}
-      community.general.dnsmadeeasy:
-        account_key: "{{ dnsmadeeasy_api_key }}"
-        account_secret: "{{ dnsmadeeasy_secret_key }}"
-        state: absent
-        domain: "{{ domain_name | regex_replace('^[^\\.]+\\.', '') }}"
-        record_type: "TXT"
-        record_ttl: 300
-        record_name: "{{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].record | regex_replace('^(_acme-challenge\\.[^\\.]+)\\..*$', '\\1') }}"
-        record_value: "{{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].resource_value }}"
-      when: acme_dns_challenge is changed
+    # - name: Cleanup dns-01 challenge record for {{ domain_name }}
+    #   community.general.dnsmadeeasy:
+    #     account_key: "{{ dnsmadeeasy_api_key }}"
+    #     account_secret: "{{ dnsmadeeasy_secret_key }}"
+    #     state: absent
+    #     domain: "{{ domain_name | regex_replace('^[^\\.]+\\.', '') }}"
+    #     record_type: "TXT"
+    #     record_ttl: 300
+    #     record_name: "{{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].record | regex_replace('^(_acme-challenge\\.[^\\.]+)\\..*$', '\\1') }}"
+    #     record_value: "{{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].resource_value }}"
+    #   when: acme_dns_challenge is changed
 
     # Creates a PFX file from the PEM based privatekey and certificate files.
     # Also adds the cert chain to the PFX file.
