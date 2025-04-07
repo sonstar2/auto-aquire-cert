@@ -1,0 +1,14 @@
+---
+acme_challenge_type: dns-01
+acme_directory: https://acme-v02.api.letsencrypt.org/directory
+acme_version: 2
+acme_email: certificate-reminders@sandbox2467.opentlc.com
+domain_name: sonaap.sandbox2467.opentlc.com
+org_name: RedHat
+
+
+# Uncomment this section for staging letsencrypt servers
+acme_account_key: tmp/acme_account_key.key
+
+# dnsmadeeasy_api_key: <api-key-goes-here>
+# dnsmadeeasy_secret_key: <api-secret-goes-here>

@@ -1,0 +1,189 @@
+---
+- name: Issue Certificate from letsencrypt
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+
+    # Automatically generates a private key for use with LetsEncrypt
+    # Will only run once unless the private key is deleted from the account directory
+    - name: Generate Private Key for ACME Account
+      community.crypto.openssl_privatekey:
+        path: "{{ acme_account_key }}"
+        type: RSA
+        size: 4096
+
+    # Uses the private key generated in the first task to create a LetsEncrypt Account
+    - name: Register ACME Account
+      community.crypto.acme_account:
+        acme_directory: "{{ acme_directory }}"
+        acme_version: "{{ acme_version }}"
+        account_key_src: "{{ acme_account_key }}"
+        terms_agreed: true
+        state: present
+        contact:
+          - mailto:{{ acme_email }}
+
+
+    # Queries LetsEncrypt for your account infomation
+    # This isn't a required step but is used to print out and verify your account info for troubleshooting.
+    - name: Get ACME Account Info
+      community.crypto.acme_account_info:
+        acme_directory: "{{ acme_directory }}"
+        acme_version: "{{ acme_version }}"
+        account_key_src: "{{ acme_account_key }}"
+      register: account_data
+
+    # Prints LetsEncrypt Account information
+    - name: Print ACME Account Info
+      ansible.builtin.debug:
+        msg:
+          - uri: "{{ account_data.account_uri }}"
+          - contact: "{{ account_data.account.contact }}"
+          - status: "{{ account_data.account.status }}"
+
+    # Creates a subdirectory in the certs directory to store the certs for the FQDN being requested
+    # This is here to support multiple certs being managed in the future and ensure each cert is in its own directory
+    - name: Create required directories
+      ansible.builtin.file:
+        path: certs/{{ domain_name }}
+        state: directory
+        mode: u=rwx,g=x,o=x
+
+    # Generates the private key.
+    # If you comment out type: RSA and size: while uncommenting type: ECC and curve: this well generate an ECC private key
+    # This also uses the ansible password module to create a random passphrase for the private key
+    - name: Generate Certificate Private Key
+      community.crypto.openssl_privatekey:
+        path: certs/{{ domain_name }}/privkey.pem
+        type: RSA
+        size: 4096
+        cipher: auto
+        passphrase: "{{ lookup('ansible.builtin.password', 'certs/{{ domain_name }}/passphrase.txt', length=25) }}"
+#        type: ECC
+#        curve: secp384r1
+
+    # Creates the CSR
+    - name: Generate Certificate Signing Request
+      community.crypto.openssl_csr:
+        path: certs/{{ domain_name }}/cert.csr
+        privatekey_path: certs/{{ domain_name }}/privkey.pem
+        privatekey_passphrase: "{{ lookup('ansible.builtin.password', 'certs/{{ domain_name }}/passphrase.txt', length=25) }}"
+        common_name: "{{ domain_name }}"
+        country_name: US
+        organization_name: "{{ org_name }}"
+        email_address: "{{ acme_email }}"
+
+    # Submits the CSR to LetsEncrypt and gets the acme_challenge data
+    - name: Submit request to ACME CA
+      community.crypto.acme_certificate:
+        acme_directory: "{{ acme_directory }}"
+        acme_version: "{{ acme_version }}"
+        account_key_src: "{{ acme_account_key }}"
+        account_email: "{{ acme_email }}"
+        terms_agreed: true
+        challenge: "{{ acme_challenge_type }}"
+        csr: certs/{{ domain_name }}/cert.csr
+        dest: certs/{{ domain_name }}/cert.pem
+        chain_dest: certs/{{ domain_name }}/chain.pem
+        fullchain_dest: certs/{{ domain_name }}/fullchain.pem
+      register: acme_challenge
+
+    # Prints out the Challenge Data for troubleshooting / verification purposes
+    - name: Print ACME Challenge Data
+      ansible.builtin.debug:
+        msg:
+          - "challenge_data.record: {{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].record }}"
+          - "challenge_data.resource: {{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].resource }}"
+          - "challenge_data.resource_value: {{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].resource_value }}"
+      when: acme_challenge is changed
+
+    # This task is specific to DNS Made Easy provider and creates the required challenge txt records to verify domain ownership.
+    # It could be replaced with any DNS provider that ansible supports.
+    # - name: Create dns-01 challenge record for {{ domain_name }}
+    #   community.general.dnsmadeeasy:
+    #     account_key: "{{ dnsmadeeasy_api_key }}"
+    #     account_secret: "{{ dnsmadeeasy_secret_key }}"
+    #     state: present
+    #     domain: "{{ domain_name | regex_replace('^[^\\.]+\\.', '') }}"
+    #     record_type: "TXT"
+    #     record_ttl: 300
+    #     record_name: "{{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].record | regex_replace('^(_acme-challenge\\.[^\\.]+)\\..*$', '\\1') }}"
+    #     record_value: "{{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].resource_value }}"
+    #   when: acme_challenge is changed
+    #   register: acme_dns_challenge
+
+    # - name: create the DNS records for the challenge
+    #   amazon.aws.route53:
+    #     command: create
+    #     zone: "{{ ler53_route_53_domain | default(omit) }}"
+    #     hosted_zone_id: "{{ ler53_route_53_zone_id | default(omit) }}"
+    #     record: "{{ ler53_item.value['dns-01']['record'] }}"
+    #     type: TXT
+    #     ttl: 300
+    #     value: "\"{{ ler53_item.value['dns-01']['resource_value'] }}\""
+    #     aws_access_key: "{{ aws_access_key | default(omit) }}"
+    #     aws_secret_key: "{{ aws_secret_key | default(omit) }}"
+    #     overwrite: yes
+    #     wait: yes
+    #   with_dict: "{{ lets_encrypt_challenge['challenge_data'] | default({}) }}"
+    #   loop_control:
+    #     loop_var: ler53_item
+
+    # Tells the LetsEncrypt service that the challenge records have been created and to validate domain ownership
+    - name: Validate ACME Challenge and retrieve cert and cert chain
+      community.crypto.acme_certificate:
+        acme_directory: "{{ acme_directory }}"
+        acme_version: "{{ acme_version }}"
+        account_key_src: "{{ acme_account_key }}"
+        account_email: "{{ acme_email }}"
+        terms_agreed: true
+        challenge: "{{ acme_challenge_type }}"
+        csr: certs/{{ domain_name }}/cert.csr
+        dest: certs/{{ domain_name }}/cert.pem
+        chain_dest: certs/{{ domain_name }}/chain.pem
+        fullchain_dest: certs/{{ domain_name }}/fullchain.pem
+        remaining_days: 91
+        data: "{{ acme_challenge }}"
+      when: acme_challenge is changed
+
+    # This task is specific to DNS Made Easy provider and cleans up the challenge records from the zone.
+    # It could be replaced with any DNS provider that ansible supports.
+    - name: Cleanup dns-01 challenge record for {{ domain_name }}
+      community.general.dnsmadeeasy:
+        account_key: "{{ dnsmadeeasy_api_key }}"
+        account_secret: "{{ dnsmadeeasy_secret_key }}"
+        state: absent
+        domain: "{{ domain_name | regex_replace('^[^\\.]+\\.', '') }}"
+        record_type: "TXT"
+        record_ttl: 300
+        record_name: "{{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].record | regex_replace('^(_acme-challenge\\.[^\\.]+)\\..*$', '\\1') }}"
+        record_value: "{{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].resource_value }}"
+      when: acme_dns_challenge is changed
+
+    # Creates a PFX file from the PEM based privatekey and certificate files.
+    # Also adds the cert chain to the PFX file.
+    - name: Create PFX certificate bundle
+      community.crypto.openssl_pkcs12:
+        action: export
+        friendly_name: "{{ domain_name }}"
+        passphrase: "{{ lookup('ansible.builtin.password', 'certs/{{ domain_name }}/passphrase.txt', length=25) }}"
+        path: certs/{{ domain_name }}/cert.pfx
+        privatekey_path: certs/{{ domain_name }}/privkey.pem
+        privatekey_passphrase: "{{ lookup('ansible.builtin.password', 'certs/{{ domain_name }}/passphrase.txt', length=25) }}"
+        certificate_path: certs/{{ domain_name }}/cert.pem
+        other_certificates:
+          - certs/{{ domain_name }}/chain.pem
+        state: present
+        mode: '0600'
+
+    - name: Create JKS
+      community.general.java_keystore:
+        name: "{{ domain_name }}"
+        dest: certs/{{ domain_name }}/cert.jks
+        keystore_type: "jks"
+        certificate_path: certs/{{ domain_name }}/fullchain.pem
+        private_key_path: certs/{{ domain_name }}/privkey.pem
+        private_key_passphrase: "{{ lookup('ansible.builtin.password', 'certs/{{ domain_name }}/passphrase.txt', length=25) }}"
+        password: changeit
