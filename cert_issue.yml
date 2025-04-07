@@ -127,9 +127,6 @@
         aws_secret_key: "{{ aws_secret_key | default(omit) }}"
         overwrite: yes
         wait: yes
-      with_dict: "{{ lets_encrypt_challenge['challenge_data'] | default({}) }}"
-      loop_control:
-        loop_var: ler53_item
 
     # Tells the LetsEncrypt service that the challenge records have been created and to validate domain ownership
     - name: Validate ACME Challenge and retrieve cert and cert chain
