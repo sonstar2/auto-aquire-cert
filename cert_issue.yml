@@ -116,7 +116,7 @@
 
     - name: debug
       ansible.builtin.debug:
-      msg: "{{ acme_challenge }}"
+        msg: "{{ acme_challenge }}"
 
     - name: create the DNS records for the challenge
       amazon.aws.route53:
