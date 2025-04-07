@@ -90,6 +90,9 @@
         fullchain_dest: certs/{{ domain_name }}/fullchain.pem
       register: acme_challenge
 
+    - name: Print ACME Challenge Data
+      ansible.builtin.debug:
+        msg: "{{ acme_challenge }}"
     # Prints out the Challenge Data for troubleshooting / verification purposes
     - name: Print ACME Challenge Data
       ansible.builtin.debug:
