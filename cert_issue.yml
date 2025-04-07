@@ -114,6 +114,10 @@
     #   when: acme_challenge is changed
     #   register: acme_dns_challenge
 
+    - name: debug
+      ansible.builtin.debug:
+      msg: "{{ acme_challenge }}"
+
     - name: create the DNS records for the challenge
       amazon.aws.route53:
         command: create
