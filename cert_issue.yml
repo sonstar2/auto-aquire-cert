@@ -59,8 +59,8 @@
         path: certs/{{ domain_name }}/privkey.pem
         type: RSA
         size: 4096
-        cipher: auto
-        passphrase: "{{ lookup('ansible.builtin.password', 'certs/{{ domain_name }}/passphrase.txt', length=25) }}"
+        # cipher: auto
+        # passphrase: "{{ lookup('ansible.builtin.password', 'certs/{{ domain_name }}/passphrase.txt', length=25) }}"
 #        type: ECC
 #        curve: secp384r1
 
@@ -163,28 +163,40 @@
     #     record_value: "{{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].resource_value }}"
     #   when: acme_dns_challenge is changed
 
-    # Creates a PFX file from the PEM based privatekey and certificate files.
-    # Also adds the cert chain to the PFX file.
-    - name: Create PFX certificate bundle
-      community.crypto.openssl_pkcs12:
-        action: export
-        friendly_name: "{{ domain_name }}"
-        passphrase: "{{ lookup('ansible.builtin.password', 'certs/{{ domain_name }}/passphrase.txt', length=25) }}"
-        path: certs/{{ domain_name }}/cert.pfx
-        privatekey_path: certs/{{ domain_name }}/privkey.pem
-        privatekey_passphrase: "{{ lookup('ansible.builtin.password', 'certs/{{ domain_name }}/passphrase.txt', length=25) }}"
-        certificate_path: certs/{{ domain_name }}/cert.pem
-        other_certificates:
-          - certs/{{ domain_name }}/chain.pem
-        state: present
-        mode: '0600'
+    - name: delete the DNS records for the challenge
+      route53:
+        command: delete
+        zone: "{{ hosted_zone_name | default(omit) }}"
+        hosted_zone_id: "{{ hosted_zone_id | default(omit) }}"
+        record: "{{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].record }}"
+        type: TXT
+        ttl: 300
+        value: "\"{{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].resource_value }}\""
+        aws_access_key: "{{ ler53_aws_access_key | default(omit) }}"
+        aws_secret_key: "{{ ler53_aws_secret_key | default(omit) }}"
 
-    - name: Create JKS
-      community.general.java_keystore:
-        name: "{{ domain_name }}"
-        dest: certs/{{ domain_name }}/cert.jks
-        keystore_type: "jks"
-        certificate_path: certs/{{ domain_name }}/fullchain.pem
-        private_key_path: certs/{{ domain_name }}/privkey.pem
-        private_key_passphrase: "{{ lookup('ansible.builtin.password', 'certs/{{ domain_name }}/passphrase.txt', length=25) }}"
-        password: changeit
+    # # Creates a PFX file from the PEM based privatekey and certificate files.
+    # # Also adds the cert chain to the PFX file.
+    # - name: Create PFX certificate bundle
+    #   community.crypto.openssl_pkcs12:
+    #     action: export
+    #     friendly_name: "{{ domain_name }}"
+    #     passphrase: "{{ lookup('ansible.builtin.password', 'certs/{{ domain_name }}/passphrase.txt', length=25) }}"
+    #     path: certs/{{ domain_name }}/cert.pfx
+    #     privatekey_path: certs/{{ domain_name }}/privkey.pem
+    #     privatekey_passphrase: "{{ lookup('ansible.builtin.password', 'certs/{{ domain_name }}/passphrase.txt', length=25) }}"
+    #     certificate_path: certs/{{ domain_name }}/cert.pem
+    #     other_certificates:
+    #       - certs/{{ domain_name }}/chain.pem
+    #     state: present
+    #     mode: '0600'
+
+    # - name: Create JKS
+    #   community.general.java_keystore:
+    #     name: "{{ domain_name }}"
+    #     dest: certs/{{ domain_name }}/cert.jks
+    #     keystore_type: "jks"
+    #     certificate_path: certs/{{ domain_name }}/fullchain.pem
+    #     private_key_path: certs/{{ domain_name }}/privkey.pem
+    #     private_key_passphrase: "{{ lookup('ansible.builtin.password', 'certs/{{ domain_name }}/passphrase.txt', length=25) }}"
+    #     password: changeit
