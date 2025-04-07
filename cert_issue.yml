@@ -117,8 +117,8 @@
     - name: create the DNS records for the challenge
       amazon.aws.route53:
         command: create
-        zone: "{{ ler53_route_53_domain | default(omit) }}"
-        hosted_zone_id: "{{ ler53_route_53_zone_id | default(omit) }}"
+        zone: "{{ hosted_zone_name | default(omit) }}"
+        hosted_zone_id: "{{ hosted_zone_id | default(omit) }}"
         record: "{{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].record | regex_replace('^(_acme-challenge\\.[^\\.]+)\\..*$', '\\1') }}"
         type: TXT
         ttl: 300

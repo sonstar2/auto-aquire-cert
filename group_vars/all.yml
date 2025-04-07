@@ -5,6 +5,8 @@ acme_version: 2
 acme_email: certificate-reminders@sandbox2467.opentlc.com
 domain_name: sonaap.sandbox2467.opentlc.com
 org_name: RedHat
+hosted_zone_name: sandbox2467.opentlc.com
+hosted_zone_id: Z07449183DCAD2KVIOMH6
 
 
 # Uncomment this section for staging letsencrypt servers
