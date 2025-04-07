@@ -99,7 +99,7 @@
           - "challenge_data.resource_value: {{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].resource_value }}"
       when: 
         - acme_challenge is changed
-        - acme_challenge.authorizations[domain_name]['status'] is not valid
+        - acme_challenge.authorizations[domain_name]['status'] is not 'valid'
 
     # This task is specific to DNS Made Easy provider and creates the required challenge txt records to verify domain ownership.
     # It could be replaced with any DNS provider that ansible supports.
@@ -131,7 +131,7 @@
         wait: yes
       when: 
         - acme_challenge is changed
-        - acme_challenge.authorizations[domain_name]['status'] is not valid
+        - acme_challenge.authorizations[domain_name]['status'] is not 'valid'
 
     # Tells the LetsEncrypt service that the challenge records have been created and to validate domain ownership
     - name: Validate ACME Challenge and retrieve cert and cert chain
