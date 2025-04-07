@@ -90,9 +90,6 @@
         fullchain_dest: certs/{{ domain_name }}/fullchain.pem
       register: acme_challenge
 
-    - name: Print ACME Challenge Data
-      ansible.builtin.debug:
-        msg: "{{ acme_challenge }}"
     # Prints out the Challenge Data for troubleshooting / verification purposes
     - name: Print ACME Challenge Data
       ansible.builtin.debug:
@@ -100,7 +97,9 @@
           - "challenge_data.record: {{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].record }}"
           - "challenge_data.resource: {{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].resource }}"
           - "challenge_data.resource_value: {{ acme_challenge['challenge_data'][domain_name][acme_challenge_type].resource_value }}"
-      when: acme_challenge is changed
+      when: 
+        - acme_challenge is changed
+        - acme_challenge.authorizations[domain_name]['status'] is not valid
 
     # This task is specific to DNS Made Easy provider and creates the required challenge txt records to verify domain ownership.
     # It could be replaced with any DNS provider that ansible supports.
@@ -117,10 +116,6 @@
     #   when: acme_challenge is changed
     #   register: acme_dns_challenge
 
-    - name: debug
-      ansible.builtin.debug:
-        msg: "{{ acme_challenge }}"
-
     - name: create the DNS records for the challenge
       amazon.aws.route53:
         command: create
@@ -134,6 +129,9 @@
         aws_secret_key: "{{ aws_secret_key | default(omit) }}"
         overwrite: yes
         wait: yes
+      when: 
+        - acme_challenge is changed
+        - acme_challenge.authorizations[domain_name]['status'] is not valid
 
     # Tells the LetsEncrypt service that the challenge records have been created and to validate domain ownership
     - name: Validate ACME Challenge and retrieve cert and cert chain
